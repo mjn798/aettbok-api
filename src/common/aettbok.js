@@ -1,12 +1,14 @@
-// require database function
+// configure imports
 
-const db = new (require('../db/neo4j'))()
+const db    = new (require('../db/neo4j'))()
 
 
 
 class AettbokFunctions {
 
     constructor() {
+
+        // configure default mappings
 
         this.allowedLabels = new Set(['Document', 'Event', 'Location', 'LocationType', 'Person', 'Sources', 'Tag'])
 
@@ -34,6 +36,13 @@ class AettbokFunctions {
     /* GENERIC FUNCTIONS */
 
 
+
+    // log error message and send back result
+
+    sendError(res, status, message) {
+        console.error(message, status)
+        return res.status(status).send()
+    }
 
     // check if given id is valid (exactly 22 word characters)
 

@@ -2,18 +2,15 @@
 
 require('dotenv/config')
 
-// configure imports
+// configure imports and defaults
 
 const aettbok     = new (require('./common/aettbok'))()
+const redis       = require('./db/redis')
+const jwt         = require('jsonwebtoken')
 const compression = require('compression')
 const express     = require('express')
-const jwt         = require('jsonwebtoken')
 
-const port        = process.env.SERVER_PORT || 3000
-
-// public keys for token validation
-
-let publicKeys = { }
+const serverPort  = process.env.SERVER_PORT || 3000
 
 // configure application
 // case sensitive routes
@@ -22,13 +19,10 @@ let publicKeys = { }
 //                 - default compression threshold: 1 kb
 
 const app = express()
-
 app.disable('x-powered-by')
 app.set('case sensitive routing', true)
 app.use(express.json())
 app.use(compression())
-
-
 
 // configure routes
 
@@ -41,16 +35,19 @@ app.post('/:label',                 validateToken, (req, res) => aettbok.postNod
 app.post('/:label/:id',             validateToken, (req, res) => aettbok.postNodeUpdate(req, res))
 app.put('/:label/:id/Relations',    validateToken, (req, res) => aettbok.putRelationship(req, res))
 
+// start server and listen to incoming request
+
+app.listen(serverPort, () => console.info(`Server running on port ${serverPort}`))
 
 
-// validate access token
-// if success, continue with next function in original call
+
+// validate authentication token
 
 /*
     400 (Bad Request)           = no valid token
     401 (Unauthorized)          = invalid token
     403 (Forbidden)             = invalid permissions
-    500 (Internal Server Error) = invalid or missing key id
+    500 (Internal Server Error) = Google / Redis issues
 */
 
 async function validateToken(req, res, next) {
@@ -58,37 +55,26 @@ async function validateToken(req, res, next) {
     let authenticationDetails = aettbok.getAuthenticationDetails(req)
 
     // missing or incorrect token header = (400)
-    if (authenticationDetails === null) { console.error('jwt:validateToken:InvalidTokenHeader', 400); return res.status(400).send() }
+    if (authenticationDetails === null || !authenticationDetails.header || !authenticationDetails.header.kid || !authenticationDetails.header.alg || !authenticationDetails.token) { return aettbok.sendError(res, 400, 'validateToken:invalidAuthenticationDetails') }
 
-    // if provided key is unknown, load from Google API and validate token
-    if (!publicKeys[authenticationDetails.header.kid]) {
+    let authenticationKey = await redis.getGoogleApiKey(authenticationDetails.header.kid)
 
-        await aettbok.getGoogleApiKeys()
-        .then(result => publicKeys = result)
-        .catch(error => { console.error('jwt:validateToken:InvalidPublicKey', error); return res.status(error).send() })
+    if (authenticationKey.error) { return aettbok.sendError(res, authenticationKey.error, 'validateToken:googleApiKeyError') }
 
-    }
-
-    return jwt.verify(authenticationDetails.token, publicKeys[authenticationDetails.header.kid], { algorithms: [authenticationDetails.header.alg] }, (error, data) => {
+    // verify token against key
+    return jwt.verify(authenticationDetails.token, authenticationKey.key, { algorithms: [authenticationDetails.header.alg] }, (error, data) => {
 
         // invalid token = (401)
-        if (error) { console.error('jwt:validateToken:InvalidToken', 401); return res.status(401).send() }
+        if (error) { return aettbok.sendError(res, 401, 'validateToken:invalidToken') }
 
         // GET needs read permissions
         // POST, PUT and DELETE need write permissions
         // if ((['GET'].includes(req.method) && (!data.user.roles.includes('read'))) || (['POST', 'PUT', 'DELETE'].includes(req.method) && (!data.user.roles.includes('write')))) { console.debug('jwt:validateToken:InvalidAccess', req.method, data.user, 403); return res.status(403).send() }
 
-        // otherwise token is verified
-        // remember userid and continue with next function of original call
+        // store userid (subject) in request and continue with next function of original call
         req.sub = data.sub
         return next()
 
     })
 
 }
-
-
-
-// start server and listen to incoming request
-
-app.listen(port, () => console.info(`Server running on port ${port}`))
