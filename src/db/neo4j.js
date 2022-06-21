@@ -144,7 +144,7 @@ function deleteRelationship(from_id, from_label, to_id, to_label, relation) {
         let session = driver.session()
 
         session
-        .run(`MATCH (n1:${from_label} { id: $from }) MATCH (n2:${to_label} { id: $to }) MATCH (n1)-[r:${relation}]->(n2) DELETE r RETURN n1, n2`, { from: from_id, to: to_id })
+        .run(`MATCH (n1:${from_label} { id: $from })-[r:${relation}]->(n2:${to_label} { id: $to }) DELETE r RETURN n1, n2`, { from: from_id, to: to_id })
         .then(result => {
 
             // if no node was affected = (404)
@@ -162,11 +162,85 @@ function deleteRelationship(from_id, from_label, to_id, to_label, relation) {
 
 
 
+/* UPSERT AND DELETE REQUESTS */
+
+
+
+// upsert a node
+
+function upsertNode(label, id, node, isUpdate) {
+    return new Promise((resolve, reject) => {
+
+        // if inserting merge with new node
+        // if updating match with existing node
+
+        let method = isUpdate ? 'MATCH' : 'MERGE'
+
+        let session = driver.session()
+
+        session
+        .run(`${method} (n1:${label} { id: $id }) SET n1 = $attributes WITH n1 OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, n2`, { id: id, attributes: { id: id, ...node } })
+        .then(result => {
+
+            // id was not found = (404)
+            if (!result.records.length) { return reject(404) }
+
+            // extract node properties
+            let node = { ...result.records[0].get('n1').properties, relations: [] }
+
+            // extract internal identity
+            let identity = result.records[0].get('n1').identity.low
+
+            // extract relationships and add to node
+            result.records.forEach(record => {
+
+                let relationship = extractRelationship(record, identity)
+                if (!relationship) { return }
+                return node.relations.push(relationship)
+
+            })
+
+            return resolve(node)
+
+        })
+        .catch(() => reject(500))
+        .finally(() => session.close())
+
+    })
+}
+
+// delete a node
+
+function deleteNodeWithLabelAndId(label, id) {
+    return new Promise((resolve, reject) => {
+
+        let session = driver.session()
+
+        session
+        .run(`MATCH (n:${label} { id: $id }) DETACH DELETE n RETURN n`, { id: id })
+        .then(result => {
+
+            // if no node was affected = (404)
+            if (result.records.reduce((previous, _record) => (1 + previous), 0) === 0) { return reject(404) }
+
+            // otherwise resolve with no content = (204)
+            return resolve(204)
+
+        })
+        .catch(() => reject(500))
+        .finally(() => session.close)
+    })
+}
+
+
+
 /* MODULE EXPORTS */
 
 module.exports = {
+    deleteNodeWithLabelAndId,
     deleteRelationship,
     getNodesWithLabel,
     getNodeWithLabelAndId,
     putRelationship,
+    upsertNode,
 }

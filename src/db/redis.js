@@ -99,7 +99,7 @@ async function getNodesWithLabel(label) {
         return db.getNodesWithLabel(label)
         .then(result => {
             // cache and set new key:value
-            client.setEx(label, 60, JSON.stringify(result))
+            client.set(label, JSON.stringify(result))
             return result
         })
         .catch(error => { return { error: error }})
@@ -112,12 +112,6 @@ async function getNodesWithLabel(label) {
 // get a specific node from cache or database
 
 async function getNodeWithLabelAndId(label, id) {
-
-    /*
-        if not set, check `nodes:label` first
-        if not found, then read from database
-        set individual cache node
-    */
 
     return await client.get(`${label}:${id}`)
     .then(async (node, error) => {
@@ -132,7 +126,7 @@ async function getNodeWithLabelAndId(label, id) {
         return db.getNodeWithLabelAndId(label, id)
         .then(result => {
             // cache and set new key:value
-            client.setEx(`${label}:${id}`, 60, JSON.stringify(result))
+            client.set(`${label}:${id}`, JSON.stringify(result))
             return result
         })
         .catch(error => { return { error: error }})
@@ -142,9 +136,10 @@ async function getNodeWithLabelAndId(label, id) {
 
 }
 
-// delete a key from cache
+// delete or set a key in cache
 
-function deleteEntry(id) { return client.del(id) }
+function deleteEntry(id)     { return client.del(id) }
+function setEntry(id, value) { return client.set(id, value) }
 
 
 
@@ -155,4 +150,5 @@ module.exports = {
     getGoogleApiKey,
     getNodesWithLabel,
     getNodeWithLabelAndId,
+    setEntry,
 }

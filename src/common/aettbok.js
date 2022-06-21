@@ -39,18 +39,18 @@ function isValidNodeId(id) { return (id !== undefined) && (id.match(/^\w{22}$/))
 
 function isValidLabel(label) { return (label !== undefined) && (allowedLabels.has(label)) }
 
-// get singular relations for types
+// get singular relationship type for two nodes
 
 function getSingularRelationshipType(from, to) { return singularRelationshipType.get(`${from}>${to}`) }
 
-// log error message and send back result
+// log error message and send error
 
 function sendError(req, res, status, message) {
     console.error(message, status, req.sub)
     return res.status(status).send()
 }
 
-// log debug message and send back result
+// log debug message and send result
 
 function sendResult(req, res, status, payload, message) {
     console.debug(message, status, req.sub)
@@ -66,9 +66,10 @@ function sendResult(req, res, status, payload, message) {
 // validate authentication token
 
 /*
+    generic response for any kind of request
     400 (Bad Request)           = no token or invalid token format
     401 (Unauthorized)          = invalid token
-    500 (Internal Server Error) = Google / Redis issues
+    500 (Internal Server Error) = authentication provider / cache issues
 */
 
 async function validateToken(req, res, next) {
@@ -119,8 +120,8 @@ function getAuthenticationDetails(req) {
 
 /*
     200 (OK)                    = success, return JSON
-    400 (Bad Request)           = invalid id, invalid label
-    500 (Internal Server Error) = Neo4J / Redis issues
+    400 (Bad Request)           = invalid label
+    500 (Internal Server Error) = database / cache issues
 */
 
 async function getNodesWithLabel(req, res) {
@@ -144,10 +145,9 @@ async function getNodesWithLabel(req, res) {
 
 /*
     200 (OK)                    = success, return JSON
-    400 (Bad Request)           = invalid id, invalid label
+    400 (Bad Request)           = invalid label or id
     404 (Not Found)             = unknown id
-    500 (Internal Server Error) = Neo4J / Redis issues
-    501 (Not Implemented)       = attribute not implemented
+    500 (Internal Server Error) = database / cache issues
 */
 
 async function getNodeWithLabelAndId(req, res) {
@@ -199,10 +199,10 @@ function qualifyRelationship(req) {
 
 /*
     204 (No Content)            = success
-    400 (Bad Request)           = unknown label in header or body, invalid id in header or body
-    404 (Not Found)             = unknown node id in header or body
+    400 (Bad Request)           = invalid label or id in header or body
+    404 (Not Found)             = unknown id in header or body
     405 (Method Not Allowed)    = unknown relationship between nodes
-    500 (Internal Server Error) = Neo4J issues
+    500 (Internal Server Error) = database issues
 */
 
 function putRelationship(req, res) {
@@ -232,10 +232,10 @@ function putRelationship(req, res) {
 
 /*
     204 (No Content)            = success
-    400 (Bad Request)           = unknown label in header or body, invalid id in header or body
-    404 (Not Found)             = unknown node id in header or body
+    400 (Bad Request)           = invalid label or id in header or body
+    404 (Not Found)             = unknown id in header or body
     405 (Method Not Allowed)    = unknown relationship between nodes
-    500 (Internal Server Error) = Neo4J issues
+    500 (Internal Server Error) = database issues
 */
 
 function deleteRelationship(req, res) {
@@ -262,12 +262,111 @@ function deleteRelationship(req, res) {
 
 
 
+/* UPSERT AND DELETE REQUESTS */
+
+
+
+// create a node
+
+/*
+    200 (OK)                    = success, returning JSON
+    400 (Bad Request)           = invalid label or id, failed field validation
+    500 (Internal Server Error) = database / cache issues
+*/
+
+function postNodeInsert(req, res) {
+
+    let { id } = req.params
+
+    // valid id = (400)
+    if (id) { return sendError(req, res, 400, `aettbok:postNodeInsert:validation ${id}`)}
+
+    // generate a new random uuid
+    req.params.id = require('short-uuid').generate()
+
+    // treat like an update
+    return this.postNodeUpdate(req, res, false)
+
+}
+
+// update a node
+
+/*
+    fields with value 'null' will be removed by the FieldValidator
+    only certain fields are allowed to be nullable in FieldValidator
+*/
+
+/*
+    200 (OK)                    = success, returning JSON
+    400 (Bad Request)           = invalid label or id, failed field validation
+    404 (Not Found)             = unknown id
+    500 (Internal Server Error) = database / cache issues
+*/
+
+function postNodeUpdate(req, res, isUpdate = true) {
+
+    let { label, id } = req.params
+
+    // unknown label or invalid id = (400)
+    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 400, `aettbok:postNodeUpdate:validation ${label} ${id}`)}
+
+    // validate body and all required fields
+    let fv = new (require('./fieldvalidator'))().validateFields(label, req.body)
+    if (fv.error) { return sendError(req, res, fv.error, `aettbok:postNodeUpdate`)}
+
+    return db.upsertNode(label, id, fv, isUpdate)
+    .then(result => {
+
+        redis.deleteEntry(`${label}`)
+        redis.setEntry(`${label}:${id}`, JSON.stringify(result))
+
+        return sendResult(req, res, 200, result, `aettbok:postNodeUpdate ${label}:${id}`)
+
+    })
+    .catch(error => sendError(req, res, error, `aettbok:postNodeUpdate ${label}:${id}`))
+
+}
+
+// delete a node and remove all of its relationships
+
+/*
+    204 (No Content)            = success
+    400 (Bad Request)           = invalid label or id
+    404 (Not Found)             = unknown id
+    500 (Internal Server Error) = database / cache issues
+*/
+
+function deleteNodeWithLabelAndId(req, res) {
+
+    let { label, id } = req.params
+
+    // unknown label or invalid id = (400)
+    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 400, `aettbok:deleteNodeWithLabelAndId:validation ${label} ${id}`)}
+
+    return db.deleteNodeWithLabelAndId(label, id)
+    .then(result => {
+
+        redis.deleteEntry(`${label}`)
+        redis.deleteEntry(`${label}:${id}`)
+
+        return sendResult(req, res, result, null, `aettbok:deleteNodeWithLabelAndId ${label}:${id}`)
+
+    })
+    .catch(error => sendError(req, res, error, `aettbok:deleteNodeWithLabelAndId ${label}:${id}`))
+
+}
+
+
+
 /* EXPORT MODULES */
 
 module.exports = {
+    deleteNodeWithLabelAndId,
     deleteRelationship,
     getNodesWithLabel,
     getNodeWithLabelAndId,
+    postNodeInsert,
+    postNodeUpdate,
     putRelationship,
     validateToken,
 }

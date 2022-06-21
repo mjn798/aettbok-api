@@ -24,12 +24,14 @@ app.use(compression())
 
 // configure routes
 
-// app.delete('/:label/:id',           aettbok.validateToken, (req, res) => aettbok.deleteNodeWithLabelAndId(req, res))
+app.get('/ping', (_req, res) => res.status(200).send())
+
+app.delete('/:label/:id',           aettbok.validateToken, (req, res) => aettbok.deleteNodeWithLabelAndId(req, res))
 app.delete('/:label/:id/Relations', aettbok.validateToken, (req, res) => aettbok.deleteRelationship(req, res))
 app.get('/:label',                  aettbok.validateToken, (req, res) => aettbok.getNodesWithLabel(req, res))
 app.get('/:label/:id',              aettbok.validateToken, (req, res) => aettbok.getNodeWithLabelAndId(req, res))
-// app.post('/:label',                 aettbok.validateToken, (req, res) => aettbok.postNodeInsert(req, res))
-// app.post('/:label/:id',             aettbok.validateToken, (req, res) => aettbok.postNodeUpdate(req, res))
+app.post('/:label',                 aettbok.validateToken, (req, res) => aettbok.postNodeInsert(req, res))
+app.post('/:label/:id',             aettbok.validateToken, (req, res) => aettbok.postNodeUpdate(req, res))
 app.put('/:label/:id/Relations',    aettbok.validateToken, (req, res) => aettbok.putRelationship(req, res))
 
 // start server and listen to incoming request
