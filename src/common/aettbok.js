@@ -6,7 +6,7 @@ const jwt   = require('jsonwebtoken')
 
 // configure default mappings
 
-const allowedLabels = new Set(['Document', 'Event', 'Location', 'LocationType', 'Person', 'Sources', 'Tag'])
+const allowedLabels = new Set(['Document', 'Event', 'Location', 'LocationType', 'Person', 'Source', 'Tag'])
 
 const singularRelationshipType = new Map()
 singularRelationshipType.set('Document>Event',         'DOCUMENTS')
