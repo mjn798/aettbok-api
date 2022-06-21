@@ -23,6 +23,7 @@ singularRelationshipType.set('Person>Person',          'HASPARENT')
 singularRelationshipType.set('Person>Tag',             'TAGGED')
 singularRelationshipType.set('Source>Document',        'SOURCES')
 singularRelationshipType.set('Source>Location',        'STOREDIN')
+singularRelationshipType.set('Source>Source',          'CONTAINEDIN')
 singularRelationshipType.set('Source>Tag',             'TAGGED')
 
 
