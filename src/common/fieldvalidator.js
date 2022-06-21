@@ -6,7 +6,11 @@ class FieldValidator {
 
         switch(label) {
 
-            case 'Document': return null
+            case 'Document': return [
+                { name: 'date',      type: "string",  nullable: true  },
+                { name: 'content',   type: "string",  nullable: true  },
+                { name: 'index',     type: "string",  nullable: true  },
+            ]
 
             case 'Event': return [
                 { name: 'type',      type: "string",  nullable: false },
@@ -34,7 +38,11 @@ class FieldValidator {
                 { name: 'alive',     type: "boolean", nullable: false },
             ]
 
-            case 'Source': return null
+            case 'Source': return [
+                { name: 'source',    type: "string",  nullable: false },
+                { name: 'author',    type: "string",  nullable: true  },
+                { name: 'link',      type: "string",  nullable: true  },
+            ]
 
             case 'Tag': return [
                 { name: 'color',     type: "string",  nullable: false },
