@@ -9,14 +9,14 @@ const driver  = neo4j.driver(process.env.NEO4J_HOST, neo4j.auth.basic(process.en
 
 
 
-// read all nodes with a specific label and return them with their relationships
+// read all nodes with their relations
 
 function getNodesWithLabel(label) {
     return new Promise((resolve, reject) => {
 
         let session = driver.session()
 
-        session
+        return session
         .readTransaction(tx => tx.run(`MATCH (n1:${label}) OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, n2`))
         .then(result => {
 
@@ -51,14 +51,14 @@ function getNodesWithLabel(label) {
     })
 }
 
-// read a specific node and its relations with given label and id
+// read a specific node and its relations
 
 function getNodeWithLabelAndId(label, id) {
     return new Promise((resolve, reject) => {
 
         let session = driver.session()
 
-        session
+        return session
         .readTransaction(tx => tx.run(`MATCH (n1:${label} { id: $id }) OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, n2`, { id: id }))
         .then(result => {
 
@@ -68,15 +68,12 @@ function getNodeWithLabelAndId(label, id) {
             // extract node properties
             let node = { ...result.records[0].get('n1').properties, relations: [] }
 
-            // extract internal identity
-            let identity = result.records[0].get('n1').identity.low
-
             // extract relationships and add to node
             result.records.forEach(record => {
 
-                let relationship = extractRelationship(record, identity)
-                if (!relationship) { return }
-                return node.relations.push(relationship)
+                let relationship = extractRelationship(record)
+
+                return relationship ? node.relations.push(relationship) : null
 
             })
 
@@ -93,16 +90,44 @@ function getNodeWithLabelAndId(label, id) {
 
 function extractRelationship(record) {
 
-    // assumes that a record always has 'n1'
-
     let i = record.get('n1').identity.low
     let n = record.get('n2')
     let r = record.get('r')
 
-    if (!(n && r)) { return null }
+    if (!(i && n && r)) { return null }
 
     return { label: n.labels[0], id: n.properties.id, direction: r.start.low === i ? 'to' : 'from' }
 
+}
+
+
+
+/* DELETE REQUESTS */
+
+
+
+// delete a node
+
+function deleteNodeWithLabelAndId(label, id) {
+    return new Promise((resolve, reject) => {
+
+        let session = driver.session()
+
+        return session
+        .run(`MATCH (n:${label} { id: $id }) DETACH DELETE n RETURN n`, { id: id })
+        .then(result => {
+
+            // if no node was affected = (404)
+            if (result.records.reduce((previous, _record) => (1 + previous), 0) === 0) { return reject(404) }
+
+            // otherwise resolve with no content = (204)
+            return resolve(204)
+
+        })
+        .catch(() => reject(500))
+        .finally(() => session.close)
+
+    })
 }
 
 
@@ -205,29 +230,6 @@ function upsertNode(label, id, node, isUpdate) {
         .catch(() => reject(500))
         .finally(() => session.close())
 
-    })
-}
-
-// delete a node
-
-function deleteNodeWithLabelAndId(label, id) {
-    return new Promise((resolve, reject) => {
-
-        let session = driver.session()
-
-        session
-        .run(`MATCH (n:${label} { id: $id }) DETACH DELETE n RETURN n`, { id: id })
-        .then(result => {
-
-            // if no node was affected = (404)
-            if (result.records.reduce((previous, _record) => (1 + previous), 0) === 0) { return reject(404) }
-
-            // otherwise resolve with no content = (204)
-            return resolve(204)
-
-        })
-        .catch(() => reject(500))
-        .finally(() => session.close)
     })
 }
 

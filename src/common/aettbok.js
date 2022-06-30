@@ -117,7 +117,7 @@ function getNodesWithLabel(req, res) {
     // unknown label = (404)
     if (!isValidLabel(label)) { return sendError(req, res, 404, `aettbok:getNodesWithLabel:unknownLabel ${label}`) }
 
-    redis.getEntry(label)
+    return redis.getEntry(label)
     .then(node => {
 
         // return cached result = (200)
@@ -154,7 +154,7 @@ function getNodeWithLabelAndId(req, res) {
     // unknown label or invalid id = (404)
     if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 404, `aettbok:getNodeWithLabelAndId:unknownLabelOrId ${label} ${id}`) }
 
-    redis.getEntry(`${label}:${id}`)
+    return redis.getEntry(`${label}:${id}`)
     .then(node => {
 
         // return cached result = (200)
@@ -178,7 +178,41 @@ function getNodeWithLabelAndId(req, res) {
 
 
 
-/* UPSERT AND DELETE REQUESTS */
+/* DELETE REQUESTS */
+
+
+
+// delete a node and remove all of its relationships
+
+/*
+    204 (No Content)            = success
+    404 (Not Found)             = unknown label or id
+    500 (Internal Server Error) = database or cache issues
+*/
+
+function deleteNodeWithLabelAndId(req, res) {
+
+    let { label, id } = req.params
+
+    // unknown label or invalid id = (404)
+    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 404, `aettbok:deleteNodeWithLabelAndId:unknownLabelOrId ${label} ${id}`)}
+
+    return db.deleteNodeWithLabelAndId(label, id)
+    .then(result => {
+
+        redis.deleteEntry(`${label}`)
+        redis.deleteEntry(`${label}:${id}`)
+
+        return sendResult(req, res, result, null, `aettbok:deleteNodeWithLabelAndId ${label}:${id}`)
+
+    })
+    .catch(error => sendError(req, res, error, `aettbok:deleteNodeWithLabelAndId ${label}:${id}`))
+
+}
+
+
+
+/* UPSERT REQUESTS */
 
 
 
@@ -240,35 +274,6 @@ function postNodeUpdate(req, res, isUpdate = true) {
 
     })
     .catch(error => sendError(req, res, error, `aettbok:postNodeUpdate ${label}:${id}`))
-
-}
-
-// delete a node and remove all of its relationships
-
-/*
-    204 (No Content)            = success
-    400 (Bad Request)           = invalid label or id
-    404 (Not Found)             = unknown id
-    500 (Internal Server Error) = database / cache issues
-*/
-
-function deleteNodeWithLabelAndId(req, res) {
-
-    let { label, id } = req.params
-
-    // unknown label or invalid id = (400)
-    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 400, `aettbok:deleteNodeWithLabelAndId:validation ${label} ${id}`)}
-
-    return db.deleteNodeWithLabelAndId(label, id)
-    .then(result => {
-
-        redis.deleteEntry(`${label}`)
-        redis.deleteEntry(`${label}:${id}`)
-
-        return sendResult(req, res, result, null, `aettbok:deleteNodeWithLabelAndId ${label}:${id}`)
-
-    })
-    .catch(error => sendError(req, res, error, `aettbok:deleteNodeWithLabelAndId ${label}:${id}`))
 
 }
 
