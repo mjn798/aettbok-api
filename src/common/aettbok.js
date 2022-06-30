@@ -8,24 +8,6 @@ const jwt   = require('jsonwebtoken')
 
 const allowedLabels = new Set(['Document', 'Event', 'Location', 'LocationType', 'Person', 'Source', 'Tag'])
 
-const singularRelationshipType = new Map()
-singularRelationshipType.set('Document>Event',         'DOCUMENTS')
-singularRelationshipType.set('Document>Location',      'DOCUMENTS')
-singularRelationshipType.set('Document>Person',        'DOCUMENTS')
-singularRelationshipType.set('Document>Tag',           'TAGGED')
-singularRelationshipType.set('Event>Location',         'WASIN')
-singularRelationshipType.set('Event>Tag',              'TAGGED')
-singularRelationshipType.set('Location>Location',      'PARTOF')
-singularRelationshipType.set('Location>LocationType',  'LOCATIONTYPE')
-singularRelationshipType.set('Location>Tag',           'TAGGED')
-singularRelationshipType.set('Person>Event',           'ATTENDED')
-singularRelationshipType.set('Person>Person',          'HASPARENT')
-singularRelationshipType.set('Person>Tag',             'TAGGED')
-singularRelationshipType.set('Source>Document',        'SOURCES')
-singularRelationshipType.set('Source>Location',        'STOREDIN')
-singularRelationshipType.set('Source>Source',          'CONTAINEDIN')
-singularRelationshipType.set('Source>Tag',             'TAGGED')
-
 
 
 /* GENERIC FUNCTIONS */
@@ -38,11 +20,7 @@ function isValidNodeId(id) { return (id !== undefined) && (id.match(/^\w{22}$/))
 
 // check if given label is valid (in list)
 
-function isValidLabel(label) { return (label !== undefined) && (allowedLabels.has(label)) }
-
-// get singular relationship type for two nodes
-
-function getSingularRelationshipType(from, to) { return singularRelationshipType.get(`${from}>${to}`) }
+function isValidLabel(label) { return allowedLabels.has(label) }
 
 // log error message and send error
 
@@ -75,6 +53,13 @@ function sendResult(req, res, status, payload, message) {
 
 async function validateToken(req, res, next) {
 
+    // CORS policy
+
+    res.header("Access-Control-Allow-Origin", "http://localhost:8080")
+    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE")
+    res.header("Access-Control-Allow-Headers", "Authorization, Accept, Accept-Encoding, Content-Type")
+
+    // authentication token and header
     let authenticationDetails = getAuthenticationDetails(req)
 
     // no token or invalid token format = (400)
@@ -121,24 +106,36 @@ function getAuthenticationDetails(req) {
 
 /*
     200 (OK)                    = success, return JSON
-    400 (Bad Request)           = invalid label
-    500 (Internal Server Error) = database / cache issues
+    404 (Not Found)             = unknown label
+    500 (Internal Server Error) = database or cache issues
 */
 
-async function getNodesWithLabel(req, res) {
+function getNodesWithLabel(req, res) {
 
     let { label } = req.params
 
-    // unknown label = (400)
-    if (!(isValidLabel(label))) { return sendError(req, res, 400, `aettbok:getNodesWithLabel:validation ${label}`) }
+    // unknown label = (404)
+    if (!isValidLabel(label)) { return sendError(req, res, 404, `aettbok:getNodesWithLabel:unknownLabel ${label}`) }
 
-    // get nodes from cache or database
-    let result = await redis.getNodesWithLabel(label)
+    redis.getEntry(label)
+    .then(node => {
 
-    // node error = (?)
-    if (result.error) { return sendError(req, res, result.error, `aettbok:getNodesWithLabel:getNodesFromRedis ${label}`)}
+        // return cached result = (200)
+        if (node) { return sendResult(req, res, 200, node, `aettbok:getNodeWithLabel:cache ${label}`) }
 
-    return sendResult(req, res, 200, result, `aettbok:getNodesWithLabel ${label}`)
+        // get from neo4j
+        db.getNodesWithLabel(label)
+        .then(nodes => {
+
+            redis.setEntry(label, JSON.stringify(nodes))
+
+            return sendResult(req, res, 200, nodes, `aettbok:getNodeWithLabel:database ${label}`)
+
+        })
+        .catch(error => sendError(req, res, error, `aettbok:getNodesWithLabel:database ${label}`))
+
+    })
+    .catch(error => sendError(req, res, error, `aettbok:getNodesWithLabel:cache ${label}`))
 
 }
 
@@ -146,118 +143,36 @@ async function getNodesWithLabel(req, res) {
 
 /*
     200 (OK)                    = success, return JSON
-    400 (Bad Request)           = invalid label or id
-    404 (Not Found)             = unknown id
-    500 (Internal Server Error) = database / cache issues
+    404 (Not Found)             = unknown label or id
+    500 (Internal Server Error) = database or cache issues
 */
 
-async function getNodeWithLabelAndId(req, res) {
+function getNodeWithLabelAndId(req, res) {
 
     let { label, id } = req.params
 
-    // unknown label or invalid id = (400)
-    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 400, `aettbok:getNodeWithLabelAndId:validation ${label} ${id}`) }
+    // unknown label or invalid id = (404)
+    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 404, `aettbok:getNodeWithLabelAndId:unknownLabelOrId ${label} ${id}`) }
 
-    // get node from cache or database
-    let result = await redis.getNodeWithLabelAndId(label, id)
+    redis.getEntry(`${label}:${id}`)
+    .then(node => {
 
-    // node error = (?)
-    if (result.error) { return sendError(req, res, result.error, `aettbok:getNodeWithLabelAndId:getNodeFromRedis ${label} ${id}`) }
+        // return cached result = (200)
+        if (node) { return sendResult(req, res, 200, node, `aettbok:getNodeWithLabelAndId:cache ${label} ${id}`) }
 
-    return sendResult(req, res, 200, result, `aettbok:getNodeWithLabelAndId ${label} ${id}`)
+        // get from neo4j
+        db.getNodeWithLabelAndId(label, id)
+        .then(node => {
 
-}
+            redis.setEntry(`${label}:${id}`, JSON.stringify(node))
 
+            return sendResult(req, res, 200, node, `aettbok:getNodeWithLabelAndId:database ${label} ${id}`)
 
-
-/* RELATIONSHIP REQUESTS */
-
-
-
-// qualifies a relationship between nodes and returns either relationship-object or error
-
-function qualifyRelationship(req) {
-
-    // the request parameters (label & id) are always the FROM nodes
-    // the body parameters (label & id) are always the TO nodes
-
-    let { label, id } = req.params
-    let to_label      = req.body.label
-    let to_id         = req.body.id
-
-    // unknown labels or invalid ids = (400)
-    if (!(isValidLabel(label) && isValidLabel(to_label) && isValidNodeId(id) && isValidNodeId(to_id) && (id !== to_id))) { return { error: 400 }}
-
-    // no defined relationship = (405)
-    let relation = getSingularRelationshipType(label, to_label)
-    if (relation === undefined) { return { error: 405 }}
-
-    return { from_id: id, from_label: label, to_id: to_id, to_label: to_label, relation: relation }
-
-}
-
-// create relationship between nodes
-
-/*
-    204 (No Content)            = success
-    400 (Bad Request)           = invalid label or id in header or body
-    404 (Not Found)             = unknown id in header or body
-    405 (Method Not Allowed)    = unknown relationship between nodes
-    500 (Internal Server Error) = database issues
-*/
-
-function putRelationship(req, res) {
-
-    let r = qualifyRelationship(req, res)
-
-    if (r.error) { return sendError(req, res, r.error, `aettbok:putRelationship ${r}`)}
-
-    return db.putRelationship(r.from_id, r.from_label, r.to_id, r.to_label, r.relation)
-    .then(result => {
-
-        // delete cache for labels and individual ids
-        redis.deleteEntry(`${r.to_label}`)
-        redis.deleteEntry(`${r.from_label}`)
-        redis.deleteEntry(`${r.to_label}:${r.to_id}`)
-        redis.deleteEntry(`${r.from_label}:${r.from_id}`)
-
-        return sendResult(req, res, result, null, `aettbok:putRelationship ${r.from_label}:${r.from_id} > ${r.to_label}:${r.to_id}`)
+        })
+        .catch(error => sendError(req, res, error, `aettbok:getNodeWithLabelAndId:database ${label} ${id}`))
 
     })
-    .catch(error => sendError(req, res, error, `aettbok:putRelationship ${r.from_label}:${r.from_id} > ${r.to_label}:${r.to_id}`))
-
-
-}
-
-// delete relationship between nodes
-
-/*
-    204 (No Content)            = success
-    400 (Bad Request)           = invalid label or id in header or body
-    404 (Not Found)             = unknown id in header or body
-    405 (Method Not Allowed)    = unknown relationship between nodes
-    500 (Internal Server Error) = database issues
-*/
-
-function deleteRelationship(req, res) {
-
-    let r = qualifyRelationship(req)
-
-    if (r.error) { return sendError(req, res, r.error, `aettbok:deleteRelationship ${r}`) }
-
-    return db.deleteRelationship(r.from_id, r.from_label, r.to_id, r.to_label, r.relation)
-    .then(result => {
-
-        // delete cache for labels and individual ids
-        redis.deleteEntry(`${r.to_label}`)
-        redis.deleteEntry(`${r.from_label}`)
-        redis.deleteEntry(`${r.to_label}:${r.to_id}`)
-        redis.deleteEntry(`${r.from_label}:${r.from_id}`)
-
-        return sendResult(req, res, result, null, `aettbok:deleteRelationship ${r.from_label}:${r.from_id} > ${r.to_label}:${r.to_id}`)
-
-    })
-    .catch(error => sendError(req, res, error, `aettbok:deleteRelationship ${r.from_label}:${r.from_id} > ${r.to_label}:${r.to_id}`))
+    .catch(error => sendError(req, res, error, `aettbok:getNodeWithLabelAndId:cache ${label} ${id}`))
 
 }
 
@@ -363,11 +278,9 @@ function deleteNodeWithLabelAndId(req, res) {
 
 module.exports = {
     deleteNodeWithLabelAndId,
-    deleteRelationship,
     getNodesWithLabel,
     getNodeWithLabelAndId,
     postNodeInsert,
     postNodeUpdate,
-    putRelationship,
     validateToken,
 }

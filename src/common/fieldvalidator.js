@@ -7,8 +7,8 @@ class FieldValidator {
         switch(label) {
 
             case 'Document': return [
-                { name: 'date',      type: "string",  nullable: true  },
                 { name: 'content',   type: "string",  nullable: true  },
+                { name: 'date',      type: "string",  nullable: true  },
                 { name: 'index',     type: "string",  nullable: true  },
             ]
 

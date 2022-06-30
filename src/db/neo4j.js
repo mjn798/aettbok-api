@@ -24,25 +24,21 @@ function getNodesWithLabel(label) {
 
             result.records.forEach(record => {
 
-                // extract node properties
-                let node = { ...record.get('n1').properties, relations: [] }
-
-                // extract internal identity
-                let identity = record.get('n1').identity.low
-
                 // check if already in nodes
-                let index = nodes.findIndex(e => e.id === node.id)
+                let index = nodes.findIndex(e => e.id === record.get('n1').properties.id)
 
                 // if not yet in nodes, push as new node
                 if (index < 0) {
-                    nodes.push(node)
+
+                    nodes.push({ ...record.get('n1').properties, relations: [] })
                     index = nodes.length - 1
+
                 }
 
-                // extract relationships and add to nodes
-                let relationship = extractRelationship(record, identity)
-                if (!relationship) { return }
-                return nodes[index].relations.push(relationship)
+                // extract relationship and add to node
+                let relationship = extractRelationship(record, record.get('n1').identity.low)
+
+                return relationship ? nodes[index].relations.push(relationship) : null
 
             })
 
@@ -95,14 +91,17 @@ function getNodeWithLabelAndId(label, id) {
 
 // extract a single relationship from a given record
 
-function extractRelationship(record, identity) {
+function extractRelationship(record) {
 
+    // assumes that a record always has 'n1'
+
+    let i = record.get('n1').identity.low
     let n = record.get('n2')
     let r = record.get('r')
 
     if (!(n && r)) { return null }
 
-    return { label: n.labels[0], id: n.properties.id, direction: r.start.low === identity ? 'to' : 'from' }
+    return { label: n.labels[0], id: n.properties.id, direction: r.start.low === i ? 'to' : 'from' }
 
 }
 

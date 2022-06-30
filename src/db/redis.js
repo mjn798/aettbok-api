@@ -78,68 +78,34 @@ function getGoogleApiKeys() {
 
 
 
-/* DATABASE CACHING */
+/* NODE CACHING */
 
 
 
-// get nodes with specific label from cache or database
-
-async function getNodesWithLabel(label) {
-
-    return await client.get(label)
-    .then(async (nodes, error) => {
-
-        // Redis Client error = (500)
-        if (error) { return { error: 500 }}
-
-        // found key:value in cache
-        if (nodes) { return JSON.parse(nodes) }
-
-        // did not find key:value in cache
-        return db.getNodesWithLabel(label)
-        .then(result => {
-            // cache and set new key:value
-            client.set(label, JSON.stringify(result))
-            return result
-        })
-        .catch(error => { return { error: error }})
-
-    })
-    .catch(() => { return { error: 500 }})
-
-}
-
-// get a specific node from cache or database
-
-async function getNodeWithLabelAndId(label, id) {
-
-    return await client.get(`${label}:${id}`)
-    .then(async (node, error) => {
-
-        // Redis Client error = (500)
-        if (error) { return { error: 500 }}
-
-        // found key:value in cache
-        if (node) { return JSON.parse(node) }
-
-        // did not find key:value in cache
-        return db.getNodeWithLabelAndId(label, id)
-        .then(result => {
-            // cache and set new key:value
-            client.set(`${label}:${id}`, JSON.stringify(result))
-            return result
-        })
-        .catch(error => { return { error: error }})
-
-    })
-    .catch(() => { return { error: 500 }})
-
-}
-
-// delete or set a key in cache
+// function setEntry(id, value) { return client.set(id, value) }
+function setEntry(id, value) { return client.setEx(id, process.env.REDIS_NODECACHE_SEC, value) }
 
 function deleteEntry(id)     { return client.del(id) }
-function setEntry(id, value) { return client.set(id, value) }
+
+function getEntry(id) {
+    return new Promise((resolve, reject) => {
+
+        return client.get(id)
+        .then((node, error) => {
+
+            // Redis Client error = (500)
+            if (error) { return reject(500) }
+
+            // found id
+            if (node) { return resolve(JSON.parse(node)) }
+
+            return resolve(null)
+
+        })
+        .catch(() => reject(500))
+
+    })
+}
 
 
 
@@ -147,8 +113,7 @@ function setEntry(id, value) { return client.set(id, value) }
 
 module.exports = {
     deleteEntry,
+    getEntry,
     getGoogleApiKey,
-    getNodesWithLabel,
-    getNodeWithLabelAndId,
     setEntry,
 }
