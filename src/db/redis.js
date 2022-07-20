@@ -83,7 +83,7 @@ function getGoogleApiKeys() {
 
 
 // function setEntry(id, value) { return client.set(id, value) }
-function setEntry(id, value) { return client.setEx(id, process.env.REDIS_NODECACHE_SEC, value) }
+function setEntry(id, value) { return client.setEx(id, process.env.REDIS_NODECACHE_SEC, JSON.stringify(value)) }
 
 function deleteEntry(id) { return client.del(id) }
 

@@ -48,7 +48,7 @@ function sendResult(req, res, status, payload, message) {
     generic response for any kind of request
     400 (Bad Request)           = no token or invalid token format
     401 (Unauthorized)          = invalid token
-    500 (Internal Server Error) = authentication provider / cache issues
+    500 (Internal Server Error) = authentication provider or cache issues
 */
 
 async function validateToken(req, res, next) {
@@ -56,15 +56,27 @@ async function validateToken(req, res, next) {
     // CORS policy
 
     res.header("Access-Control-Allow-Origin", "http://localhost:8080")
-    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE")
-    res.header("Access-Control-Allow-Headers", "Authorization, Accept, Accept-Encoding, Content-Type")
+    res.header("Access-Control-Allow-Methods", "DELETE, GET, POST")
+    res.header("Access-Control-Allow-Headers", "Accept-Encoding, Accept, Authorization, Content-Type")
 
     // authentication token and header
-    let authenticationDetails = getAuthenticationDetails(req)
+    let authenticationDetails = null
 
-    // no token or invalid token format = (400)
-    if (authenticationDetails === null || !authenticationDetails.token || !authenticationDetails.header || !authenticationDetails.header.kid || !authenticationDetails.header.alg) { return sendError(req, res, 400, 'aettbok:validateToken:invalidTokenDetails') }
+    try {
 
+        let authHeader = req.headers['authorization']
+        let token      = authHeader && authHeader.split(' ')[1]
+
+        authenticationDetails = { token: token, header: JSON.parse(Buffer.from(token.split('.')[0], 'base64').toString('ascii')) }
+
+    } catch(e) {
+        
+        // no token or invalid token format = (400)
+        return sendError(req, res, 400, 'aettbok:validateToken:invalidTokenDetails')
+
+    }
+
+    // get cached key
     let authenticationKey = await redis.getGoogleApiKey(authenticationDetails.header.kid)
 
     // authentication key error = (?)
@@ -84,18 +96,6 @@ async function validateToken(req, res, next) {
 
 }
 
-// extract token and authentication header from request
-
-function getAuthenticationDetails(req) {
-
-    let authHeader = req.headers['authorization']
-    let token      = authHeader && authHeader.split(' ')[1]
-
-    try { return { token: token, header: JSON.parse(Buffer.from(token.split('.')[0], 'base64').toString('ascii'))} }
-    catch(error) { return null }
-
-}
-
 
 
 /* GET REQUESTS */
@@ -110,7 +110,7 @@ function getAuthenticationDetails(req) {
     500 (Internal Server Error) = database or cache issues
 */
 
-function getNodesWithLabel(req, res) {
+async function getNodesWithLabel(req, res) {
 
     let { label } = req.params
 
@@ -127,7 +127,7 @@ function getNodesWithLabel(req, res) {
         db.getNodesWithLabel(label)
         .then(nodes => {
 
-            redis.setEntry(label, JSON.stringify(nodes))
+            redis.setEntry(label, nodes)
 
             return sendResult(req, res, 200, nodes, `aettbok:getNodeWithLabel:database ${label}`)
 
@@ -147,7 +147,7 @@ function getNodesWithLabel(req, res) {
     500 (Internal Server Error) = database or cache issues
 */
 
-function getNodeWithLabelAndId(req, res) {
+async function getNodeWithLabelAndId(req, res) {
 
     let { label, id } = req.params
 
@@ -164,7 +164,7 @@ function getNodeWithLabelAndId(req, res) {
         db.getNodeWithLabelAndId(label, id)
         .then(node => {
 
-            redis.setEntry(`${label}:${id}`, JSON.stringify(node))
+            redis.setEntry(`${label}:${id}`, node)
 
             return sendResult(req, res, 200, node, `aettbok:getNodeWithLabelAndId:database ${label} ${id}`)
 
@@ -190,7 +190,7 @@ function getNodeWithLabelAndId(req, res) {
     500 (Internal Server Error) = database or cache issues
 */
 
-function deleteNodeWithLabelAndId(req, res) {
+async function deleteNodeWithLabelAndId(req, res) {
 
     let { label, id } = req.params
 
@@ -220,8 +220,9 @@ function deleteNodeWithLabelAndId(req, res) {
 
 /*
     200 (OK)                    = success, returning JSON
-    400 (Bad Request)           = invalid label or id, failed field validation
-    500 (Internal Server Error) = database / cache issues
+    400 (Bad Request)           = failed field validation or id present
+    404 (Not Found)             = unknown label
+    500 (Internal Server Error) = database or cache issues
 */
 
 function postNodeInsert(req, res) {
@@ -229,7 +230,7 @@ function postNodeInsert(req, res) {
     let { id } = req.params
 
     // valid id = (400)
-    if (id) { return sendError(req, res, 400, `aettbok:postNodeInsert:validation ${id}`)}
+    if (id) { return sendError(req, res, 400, `aettbok:postNodeInsert:hasIdInCreate ${id}`)}
 
     // generate a new random uuid
     req.params.id = require('short-uuid').generate()
@@ -248,9 +249,9 @@ function postNodeInsert(req, res) {
 
 /*
     200 (OK)                    = success, returning JSON
-    400 (Bad Request)           = invalid label or id, failed field validation
-    404 (Not Found)             = unknown id
-    500 (Internal Server Error) = database / cache issues
+    400 (Bad Request)           = failed field validation
+    404 (Not Found)             = unknown label or id
+    500 (Internal Server Error) = database or cache issues
 */
 
 function postNodeUpdate(req, res, isUpdate = true) {
@@ -258,17 +259,17 @@ function postNodeUpdate(req, res, isUpdate = true) {
     let { label, id } = req.params
 
     // unknown label or invalid id = (400)
-    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 400, `aettbok:postNodeUpdate:validation ${label} ${id}`)}
+    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 404, `aettbok:postNodeUpdate:unknownLabelOrId ${label} ${id}`)}
 
     // validate body and all required fields
-    let fv = new (require('./fieldvalidator'))().validateFields(label, req.body)
-    if (fv.error) { return sendError(req, res, fv.error, `aettbok:postNodeUpdate`)}
+    let fv = require('./fieldvalidator').validateFields(label, req.body)
+    if (fv.error) { return sendError(req, res, fv.error, `aettbok:postNodeUpdate:fieldValidation`)}
 
     return db.upsertNode(label, id, fv, isUpdate)
     .then(result => {
 
         redis.deleteEntry(`${label}`)
-        redis.setEntry(`${label}:${id}`, JSON.stringify(result))
+        redis.setEntry(`${label}:${id}`, result)
 
         return sendResult(req, res, 200, result, `aettbok:postNodeUpdate ${label}:${id}`)
 

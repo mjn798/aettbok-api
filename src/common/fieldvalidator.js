@@ -1,86 +1,104 @@
-class FieldValidator {
+const fieldValidation = new Map()
 
-    constructor() { }
+fieldValidation.set('Document', [
+    /* fields */
+    { name: 'content',      type: "string",  nullable: true  },
+    { name: 'date',         type: "string",  nullable: true  },
+    { name: 'index',        type: "string",  nullable: true  },
+    /* relations */
+    { name: 'persons',      type: "object",  nullable: false }, // 1:n
+    { name: 'sourcedby',    type: "string",  nullable: true  },
+    { name: 'tags',         type: "object",  nullable: false }, // 1:n
+])
 
-    getFields(label) {
+fieldValidation.set('Event', [
+    /* fields */
+    { name: 'comment',      type: "string",  nullable: true  },
+    { name: 'type',         type: "string",  nullable: false },
+    { name: 'day',          type: "number",  nullable: true  },
+    { name: 'month',        type: "number",  nullable: true  },
+    { name: 'year',         type: "number",  nullable: true  },
+    /* relations */
+    { name: 'attended',     type: "object",  nullable: true  }, // 1:n
+    { name: 'documentedby', type: "object",  nullable: true  }, // 1:n
+    { name: 'tags',         type: "object",  nullable: false }, // 1:n
+    { name: 'wasin',        type: "string",  nullable: true  },
+])
 
-        switch(label) {
+fieldValidation.set('Location', [
+    /* fields */
+    { name: 'location',     type: "string",  nullable: false },
+    { name: 'latitude',     type: "number",  nullable: true  },
+    { name: 'longitude',    type: "number",  nullable: true  },
+    /* relations */
+    { name: 'documentedby', type: "object",  nullable: true  }, // 1:n
+    { name: 'locationtype', type: "string",  nullable: true  },
+    { name: 'partof',       type: "string",  nullable: true  },
+    { name: 'tags',         type: "object",  nullable: false }, // 1:n
+])
 
-            case 'Document': return [
-                { name: 'content',   type: "string",  nullable: true  },
-                { name: 'date',      type: "string",  nullable: true  },
-                { name: 'index',     type: "string",  nullable: true  },
-            ]
+fieldValidation.set('LocationType', [
+    /* fields */
+    { name: 'hierarchy',    type: "number",  nullable: false },
+    { name: 'type',         type: "string",  nullable: false },
+    /* no relations */
+])
 
-            case 'Event': return [
-                { name: 'type',      type: "string",  nullable: false },
-                { name: 'day',       type: "number",  nullable: true  },
-                { name: 'month',     type: "number",  nullable: true  },
-                { name: 'year',      type: "number",  nullable: true  },
-            ]
+fieldValidation.set('Person', [
+    /* fields */
+    { name: 'firstname',    type: "string",  nullable: true  },
+    { name: 'lastname',     type: "string",  nullable: true  },
+    { name: 'notes',        type: "string",  nullable: true  },
+    { name: 'gender',       type: "string",  nullable: false },
+    { name: 'alive',        type: "boolean", nullable: false },
+    /* relations */
+    { name: 'documentedby', type: "object",  nullable: true  }, // 1:n
+    { name: 'hasparents',   type: "object",  nullable: true  }, // 1:n
+    { name: 'tags',         type: "object",  nullable: false }, // 1:n
+])
 
-            case 'Location': return [
-                { name: 'location',  type: "string",  nullable: false },
-                { name: 'latitude',  type: "number",  nullable: true  },
-                { name: 'longitude', type: "number",  nullable: true  },
-            ]
+fieldValidation.set('Source', [
+    /* fields */
+    { name: 'source',       type: "string",  nullable: false },
+    { name: 'author',       type: "string",  nullable: true  },
+    { name: 'link',         type: "string",  nullable: true  },
+    /* relations */
+    { name: 'containedin',  type: "string",  nullable: true  },
+    { name: 'storedin',     type: "string",  nullable: true  },
+    { name: 'tags',         type: "object",  nullable: false }, // 1:n
+])
 
-            case 'LocationType': return [
-                { name: 'default',   type: "boolean", nullable: false },
-                { name: 'hierarchy', type: "number",  nullable: false },
-                { name: 'type',      type: "string",  nullable: false },
-            ]
+fieldValidation.set('Tag', [
+    /* fields */
+    { name: 'color',        type: "string",  nullable: false },
+    { name: 'tag',          type: "string",  nullable: false },
+    /* no relations */
+])
 
-            case 'Person': return [
-                { name: 'firstname', type: "string",  nullable: true  },
-                { name: 'lastname',  type: "string",  nullable: true  },
-                { name: 'gender',    type: "string",  nullable: false },
-                { name: 'alive',     type: "boolean", nullable: false },
-            ]
+function validateFields(label, data) {
 
-            case 'Source': return [
-                { name: 'source',    type: "string",  nullable: false },
-                { name: 'author',    type: "string",  nullable: true  },
-                { name: 'link',      type: "string",  nullable: true  },
-            ]
+    let fields = fieldValidation.get(label)
 
-            case 'Tag': return [
-                { name: 'color',     type: "string",  nullable: false },
-                { name: 'tag',       type: "string",  nullable: false },
-            ]
+    // unknown label = (404)
+    if (!fields) { return { error: 404 } }
 
-            default: return null
+    // check for errors
+    let error = null
+    let validated = { }
 
-        }
+    fields.forEach(field => {
 
-    }
+        if (error) { return }
 
-    validateFields(label, data) {
+        // missing field or wrong data type
+        if (!(typeof(data[field.name]) === field.type || (data[field.name] === null && field.nullable))) { return error = { error: 400 }}
 
-        let fields = this.getFields(label)
+        return validated[field.name] = data[field.name]
 
-        // incorrect label = (400)
-        if (fields === null) { return { error: 400 } }
+    })
 
-        // check for errors
-        let error = null
-        let validated = { }
-
-        fields.forEach(field => {
-
-            if (error !== null) { return }
-
-            // missing field or wrong data type
-            if (!(typeof(data[field.name]) === field.type || (data[field.name] === null && field.nullable))) { return error = { error: 400 }}
-
-            return validated[field.name] = data[field.name]
-
-        })
-
-        return error === null ? validated : error
-
-    }
+    return error === null ? validated : error
 
 }
 
-module.exports = FieldValidator
+module.exports = { validateFields }

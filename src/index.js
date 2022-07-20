@@ -26,19 +26,19 @@ app.use(compression())
 
 app.get('/ping', (_req, res) => res.status(200).send())
 
-app.delete('/:label/:id', aettbok.validateToken, (req, res) => aettbok.deleteNodeWithLabelAndId(req, res))
-app.get('/:label',        aettbok.validateToken, (req, res) => aettbok.getNodesWithLabel(req, res))
-app.get('/:label/:id',    aettbok.validateToken, (req, res) => aettbok.getNodeWithLabelAndId(req, res))
-app.post('/:label',       aettbok.validateToken, (req, res) => aettbok.postNodeInsert(req, res))
-app.post('/:label/:id',   aettbok.validateToken, (req, res) => aettbok.postNodeUpdate(req, res))
+app.delete('/:label/:id',           aettbok.validateToken, (req, res) => aettbok.deleteNodeWithLabelAndId(req, res))
+app.get('/:label',                  aettbok.validateToken, (req, res) => aettbok.getNodesWithLabel(req, res))
+app.get('/:label/:id',              aettbok.validateToken, (req, res) => aettbok.getNodeWithLabelAndId(req, res))
+app.post('/:label',                 aettbok.validateToken, (req, res) => aettbok.postNodeInsert(req, res))
+app.post('/:label/:id',             aettbok.validateToken, (req, res) => aettbok.postNodeUpdate(req, res))
 
 // CORS policy
 
-app.options('/:label?/:id', (req, res) => {
+app.options('/:label?/:id?', (_req, res) => {
 
     res.header("Access-Control-Allow-Origin", "http://localhost:8080")
-    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE")
-    res.header("Access-Control-Allow-Headers", "Authorization, Accept, Accept-Encoding, Content-Type")
+    res.header("Access-Control-Allow-Methods", "DELETE, GET, POST")
+    res.header("Access-Control-Allow-Headers", "Accept-Encoding, Accept, Authorization, Content-Type")
 
     return res.status(200).send()
 
