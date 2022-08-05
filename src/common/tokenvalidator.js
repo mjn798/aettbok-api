@@ -23,35 +23,41 @@ const jwt     = require('jsonwebtoken')
 async function validateToken(req, res, next) {
 
     // authentication token and header
-    let authenticationDetails = null
-
-    try {
-
-        let authHeader = req.headers['authorization']
-        let token      = authHeader && authHeader.split(' ')[1]
-
-        authenticationDetails = { token: token, header: JSON.parse(Buffer.from(token.split('.')[0], 'base64').toString('ascii')) }
-
-    } catch(e) {
-        
-        // no token or invalid token format = (400)
-        return aettbok.sendError(req, res, 400, 'aettbok:validateToken:invalidTokenDetails')
-
-    }
+    let authenticationDetails = getAuthenticationDetails(req, res)
 
     // get cached key
     getGoogleApiKey(authenticationDetails.header.kid)
     .then(result => jwt.verify(authenticationDetails.token, result, { algorithms: [authenticationDetails.header.alg] }, (error, data) => {
 
         // invalid token = (401)
-        if (error) { return aettbok.sendError(req, res, 401, 'aettbok:validateToken:invalidToken') }
+        if (error) { return aettbok.sendError(req, res, 401, 'tokenvalidator:invalidToken') }
 
         // store userid (sub[ject]) in request and continue
         req.sub = data.sub
         return next()
 
     }))
-    .catch(error => aettbok.sendError(req, res, error, 'aettbok:validateToken:googleApiKeyError'))
+    .catch(error => aettbok.sendError(req, res, error, 'tokenvalidator:GoogleApiKeyError'))
+
+}
+
+// get authentication details from request
+
+function getAuthenticationDetails(req, res) {
+
+    try {
+
+        let authHeader = req.headers['authorization']
+        let token      = authHeader && authHeader.split(' ')[1]
+
+        return { token: token, header: JSON.parse(Buffer.from(token.split('.')[0], 'base64').toString('ascii')) }
+
+    } catch(e) {
+        
+        // no token or invalid token format = (400)
+        return aettbok.sendError(req, res, 400, 'tokenvalidator:invalidAuthenticationDetails')
+
+    }
 
 }
 

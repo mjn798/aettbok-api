@@ -31,74 +31,39 @@ function sendResult(req, res, status, payload, message) { return res.status(stat
 
 /*
     200 (OK)                    = success, return JSON
-    404 (Not Found)             = unknown label
-    500 (Internal Server Error) = database or cache issues
-*/
-
-async function getNodesWithLabel(req, res) {
-
-    let { label } = req.params
-
-    // unknown label = (404)
-    if (!isValidLabel(label)) { return sendError(req, res, 404, `aettbok:getNodesWithLabel:unknownLabel ${label}`) }
-
-    return redis.getEntry(label)
-    .then(node => {
-
-        // return cached result = (200)
-        if (node) { return sendResult(req, res, 200, node, `aettbok:getNodeWithLabel:cache ${label}`) }
-
-        // get from neo4j
-        db.getNodesWithLabel(label)
-        .then(nodes => {
-
-            redis.setEntry(label, nodes)
-
-            return sendResult(req, res, 200, nodes, `aettbok:getNodeWithLabel:database ${label}`)
-
-        })
-        .catch(error => sendError(req, res, error, `aettbok:getNodesWithLabel:database ${label}`))
-
-    })
-    .catch(error => sendError(req, res, error, `aettbok:getNodesWithLabel:cache ${label}`))
-
-}
-
-// get specific node matching given label and id
-
-/*
-    200 (OK)                    = success, return JSON
     404 (Not Found)             = unknown label or id
     500 (Internal Server Error) = database or cache issues
 */
 
-async function getNodeWithLabelAndId(req, res) {
+async function getNodes(req, res) {
 
     let { label, id } = req.params
 
-    // unknown label or invalid id = (404)
-    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 404, `aettbok:getNodeWithLabelAndId:unknownLabelOrId ${label} ${id}`) }
+    // unknown label = (404)
+    if (!isValidLabel(label)) { return sendError(req, res, 404, `aettbok:getNodes:unknownLabel ${label}`) }
 
-    return redis.getEntry(`${label}:${id}`)
+    // given id, but invalid = (404)
+    if (!id) { id = null }
+    if (id && !isValidNodeId(id)) { return sendError(req, res, 404, `aettbok:getNodes:invalidId ${label} ${id}`) }
+
+    let key = id === null ? label : `${label}:${id}`
+
+    return redis.getEntry(key)
     .then(node => {
 
         // return cached result = (200)
-        if (node) { return sendResult(req, res, 200, node, `aettbok:getNodeWithLabelAndId:cache ${label} ${id}`) }
+        if (node) { return sendResult(req, res, 200, node, `aettbok:getNodes:cache ${key}`)}
 
-        // get from neo4j
-        db.getNodeWithLabelAndId(label, id)
-        .then(node => {
-
-            redis.setEntry(`${label}:${id}`, node)
-
-            return sendResult(req, res, 200, node, `aettbok:getNodeWithLabelAndId:database ${label} ${id}`)
-
+        // get from database
+        return db.getNodes(label, id)
+        .then(nodes => {
+            redis.setEntry(key, nodes)
+            return sendResult(req, res, 200, nodes, `aettbok:getNodes:database ${key}`)
         })
-        .catch(error => sendError(req, res, error, `aettbok:getNodeWithLabelAndId:database ${label} ${id}`))
+        .catch(error => sendError(req, res, error, `aettbok:getNodes:database ${key}`))
 
     })
-    .catch(error => sendError(req, res, error, `aettbok:getNodeWithLabelAndId:cache ${label} ${id}`))
-
+    .catch(error => sendError(req, res, error, `aettbok:getNodes:cache ${key}`))
 }
 
 
@@ -209,8 +174,8 @@ function postNodeUpdate(req, res, isUpdate = true) {
 
 module.exports = {
     deleteNodeWithLabelAndId,
-    getNodesWithLabel,
-    getNodeWithLabelAndId,
+    getNodes,
     postNodeInsert,
     postNodeUpdate,
+    sendError,
 }

@@ -13,40 +13,30 @@ let relationshipFields = new Set(['attended', 'containedin', 'documentedby', 'ha
 
 
 
-// read all nodes with their relations
+// read nodes with their relations
 
-function getNodesWithLabel(label) {
+function getNodes(label, id = null) {
     return new Promise((resolve, reject) => {
+
+        let query = `MATCH (n1:${label}${ id === null ? '' : ' { id : $id}' }) OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, n2`
+        let param = { id: id }
 
         let session = driver.session()
 
         return session
-        .readTransaction(tx => tx.run(`MATCH (n1:${label}) OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, n2`))
+        .readTransaction(tx => tx.run(query, param))
         .then(result => {
 
-            let nodes = []
+            let nodes = extractNodes(result.records)
 
-            result.records.forEach(record => {
+            // return full result set
+            if (id === null) { return resolve(nodes) }
 
-                // check if already in nodes
-                let index = nodes.findIndex(e => e.id === record.get('n1').properties.id)
+            // no result for single id = (404)
+            if (nodes.length !== 1) { return reject(404) }
 
-                // if not yet in nodes, push as new node
-                if (index < 0) {
-
-                    nodes.push({ ...record.get('n1').properties, relations: [] })
-                    index = nodes.length - 1
-
-                }
-
-                // extract relationship and add to node
-                let relationship = extractRelationship(record, record.get('n1').identity.low)
-
-                return relationship ? nodes[index].relations.push(relationship) : null
-
-            })
-
-            return resolve(nodes)
+            // return single id as object, not array
+            return resolve(nodes[0])
 
         })
         .catch(() => reject(500))
@@ -55,39 +45,30 @@ function getNodesWithLabel(label) {
     })
 }
 
-// read a specific node and its relations
+// extract nodes from records
 
-function getNodeWithLabelAndId(label, id) {
-    return new Promise((resolve, reject) => {
+function extractNodes(records) {
 
-        let session = driver.session()
+    let nodes = []
 
-        return session
-        .readTransaction(tx => tx.run(`MATCH (n1:${label} { id: $id }) OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, n2`, { id: id }))
-        .then(result => {
+    records.forEach(record => {
 
-            // no records = (404)
-            if (!result.records.length) { return reject(404) }
+        // check if already in nodes and push as new node
+        let index = nodes.findIndex(e => e.id === record.get('n1').properties.id)
 
-            // extract node properties
-            let node = { ...result.records[0].get('n1').properties, relations: [] }
+        if (index < 0) {
+            nodes.push({ ...record.get('n1').properties, relations: [] })
+            index = nodes.length - 1
+        }
 
-            // extract relationships and add to node
-            result.records.forEach(record => {
-
-                let relationship = extractRelationship(record)
-
-                return relationship ? node.relations.push(relationship) : null
-
-            })
-
-            return resolve(node)
-
-        })
-        .catch(() => reject(500))
-        .finally(() => session.close())
+        // extract relations and add to node
+        let relationship = extractRelationship(record)
+        return relationship ? nodes[index].relations.push(relationship) : null
 
     })
+
+    return nodes
+
 }
 
 // extract a single relationship from a given record
@@ -144,12 +125,6 @@ function deleteNodeWithLabelAndId(label, id) {
 
 function upsertNode(label, id, node, isUpdate) {
     return new Promise((resolve, reject) => {
-
-
-        // -------------------------------------------------------
-        // NEEDS TO BE FULLY REWORKED TO ALSO HANDLE RELATIONSHIPS
-        // -------------------------------------------------------
-
 
         // attributes are node fields minus relationship fields
         // relations  are relationship fields minus node fields
@@ -310,7 +285,6 @@ function upsertNode(label, id, node, isUpdate) {
 
 module.exports = {
     deleteNodeWithLabelAndId,
-    getNodesWithLabel,
-    getNodeWithLabelAndId,
+    getNodes,
     upsertNode,
 }

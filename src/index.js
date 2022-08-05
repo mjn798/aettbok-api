@@ -1,8 +1,6 @@
-// configure environment variables
+// configure imports and defaults
 
 require('dotenv/config')
-
-// configure imports and defaults
 
 const aettbok     = require('./common/aettbok')
 const tokens      = require('./common/tokenvalidator')
@@ -26,8 +24,7 @@ app.use(cors())
 app.get('/ping', (_req, res) => res.status(204).send())
 
 app.delete('/:label/:id', tokens.validateToken, (req, res) => aettbok.deleteNodeWithLabelAndId(req, res))
-app.get('/:label',        tokens.validateToken, (req, res) => aettbok.getNodesWithLabel(req, res))
-app.get('/:label/:id',    tokens.validateToken, (req, res) => aettbok.getNodeWithLabelAndId(req, res))
+app.get('/:label/:id?',   tokens.validateToken, (req, res) => aettbok.getNodes(req, res))
 app.post('/:label',       tokens.validateToken, (req, res) => aettbok.postNodeInsert(req, res))
 app.post('/:label/:id',   tokens.validateToken, (req, res) => aettbok.postNodeUpdate(req, res))
 
