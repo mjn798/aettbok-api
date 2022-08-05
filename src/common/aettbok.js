@@ -1,10 +1,7 @@
-// configure imports
+// configure imports and defaults
 
 const db    = require('../db/neo4j')
 const redis = require('../db/redis')
-const jwt   = require('jsonwebtoken')
-
-// configure default mappings
 
 const allowedLabels = new Set(['Document', 'Event', 'Location', 'LocationType', 'Person', 'Source', 'Tag'])
 
@@ -14,87 +11,15 @@ const allowedLabels = new Set(['Document', 'Event', 'Location', 'LocationType', 
 
 
 
-// check if given id is valid (exactly 22 word characters)
+// check if given id is valid (exactly 22 word characters) and if given label is valid (in set)
 
-function isValidNodeId(id) { return (id !== undefined) && (id.match(/^\w{22}$/)) }
+const isValidNodeId = id    => (id !== undefined) && (id.match(/^\w{22}$/))
+const isValidLabel  = label => allowedLabels.has(label)
 
-// check if given label is valid (in list)
+// log and send results and errors
 
-function isValidLabel(label) { return allowedLabels.has(label) }
-
-// log error message and send error
-
-function sendError(req, res, status, message) {
-    console.error(message, status, req.sub)
-    return res.status(status).send()
-}
-
-// log debug message and send result
-
-function sendResult(req, res, status, payload, message) {
-    console.debug(message, status, req.sub)
-    return res.status(status).send(payload)
-}
-
-
-
-/* TOKEN VALIDATION */
-
-
-
-// validate authentication token
-
-/*
-    generic response for any kind of request
-    400 (Bad Request)           = no token or invalid token format
-    401 (Unauthorized)          = invalid token
-    500 (Internal Server Error) = authentication provider or cache issues
-*/
-
-async function validateToken(req, res, next) {
-
-    // CORS policy
-
-    res.header("Access-Control-Allow-Origin", "http://localhost:8080")
-    res.header("Access-Control-Allow-Methods", "DELETE, GET, POST")
-    res.header("Access-Control-Allow-Headers", "Accept-Encoding, Accept, Authorization, Content-Type")
-
-    // authentication token and header
-    let authenticationDetails = null
-
-    try {
-
-        let authHeader = req.headers['authorization']
-        let token      = authHeader && authHeader.split(' ')[1]
-
-        authenticationDetails = { token: token, header: JSON.parse(Buffer.from(token.split('.')[0], 'base64').toString('ascii')) }
-
-    } catch(e) {
-        
-        // no token or invalid token format = (400)
-        return sendError(req, res, 400, 'aettbok:validateToken:invalidTokenDetails')
-
-    }
-
-    // get cached key
-    let authenticationKey = await redis.getGoogleApiKey(authenticationDetails.header.kid)
-
-    // authentication key error = (?)
-    if (authenticationKey.error) { return sendError(req, res, authenticationKey.error, 'aettbok:validateToken:googleApiKeyError')}
-
-    // verify token against key
-    return jwt.verify(authenticationDetails.token, authenticationKey.key, { algorithms: [authenticationDetails.header.alg]}, (error, data) => {
-
-        // invalid token = (401)
-        if (error) { return sendError(req, res, 401, 'aettbok:validateToken:invalidToken') }
-
-        // store userid (sub[ject]) in request and continue
-        req.sub = data.sub
-        return next ()
-
-    })
-
-}
+function sendError(req, res, status, message)           { return res.status(status).send()        && console.error(message, status, req.sub) }
+function sendResult(req, res, status, payload, message) { return res.status(status).send(payload) && console.debug(message, status, req.sub) }
 
 
 
@@ -288,5 +213,4 @@ module.exports = {
     getNodeWithLabelAndId,
     postNodeInsert,
     postNodeUpdate,
-    validateToken,
 }

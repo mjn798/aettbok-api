@@ -1,6 +1,5 @@
 // configure imports
 
-const db    = require('./neo4j')
 const redis = require('redis')
 const https = require('https')
 
@@ -27,33 +26,36 @@ const client = redis.createClient(6379)
 
 // get or set Google API Key
 
-async function getGoogleApiKey(apikey) {
+function getGoogleApiKey(apikey) {
+    return new Promise((resolve, reject) => {
 
-    return await client.get(apikey)
-    .then(async (key, error) => {
+        return client.get(apikey)
+        .then(async (key, error) => {
 
-        // Redis Client error = (500)
-        if (error) { return { error: 500 }}
+            // Redis Client error = (500)
+            if (error) { return reject(500) }
 
-        // found key:value in cache
-        if (key) { return { key: key }}
+            // found cached key
+            if (key) { return resolve(key) }
 
-        // did not find key:value in cache
-        return await getGoogleApiKeys()
-        .then(result => {
+            // did not find cached key
+            return getGoogleApiKeys()
+            .then(result => {
 
-            // missing key from Google API = (500)
-            if (!result[apikey]) { return { error: 500 } }
+                // missing key from Google API = (500)
+                if (!result[apikey]) { return reject(500) }
 
-            // cache and set new key:value
-            client.setEx(apikey, process.env.REDIS_GOOGLEAPIKEY_SEC, result[apikey])
-            return { key: result[apikey] }
+                // cache and set new key
+                client.setEx(apikey, process.env.REDIS_NODECACHE_SEC, result[apikey])
+                return resolve(result[apikey])
+
+            })
+            .catch(error => reject(error))
 
         })
-        .catch(error => { return { error: error } })
+        .catch(() => reject(500))
 
     })
-    .catch(() => { return { error: 500 } })
 
 }
 
@@ -67,7 +69,7 @@ function getGoogleApiKeys() {
             let body = ''
 
             response.setEncoding('utf-8')
-            response.on('data',  (chunk) => { body += chunk })
+            response.on('data',  (chunk) => body += chunk)
             response.on('end',   () => resolve(JSON.parse(body)))
 
         })
