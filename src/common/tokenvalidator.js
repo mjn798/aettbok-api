@@ -15,18 +15,19 @@ const jwt     = require('jsonwebtoken')
 
 /*
     generic response for any kind of request
-    400 (Bad Request)           = no token or invalid token format
-    401 (Unauthorized)          = invalid token
+    401 (Unauthorized)          = no token or invalid token
     500 (Internal Server Error) = authentication provider or cache issues
 */
 
 async function validateToken(req, res, next) {
 
     // authentication token and header
-    let authenticationDetails = getAuthenticationDetails(req, res)
+    let authenticationDetails = getAuthenticationDetails(req)
+
+    if (!authenticationDetails) { return aettbok.sendError(req, res, 401, 'tokenvalidator:invalidToken') }
 
     // get cached key
-    getGoogleApiKey(authenticationDetails.header.kid)
+    return getGoogleApiKey(authenticationDetails.header.kid)
     .then(result => jwt.verify(authenticationDetails.token, result, { algorithms: [authenticationDetails.header.alg] }, (error, data) => {
 
         // invalid token = (401)
@@ -43,7 +44,7 @@ async function validateToken(req, res, next) {
 
 // get authentication details from request
 
-function getAuthenticationDetails(req, res) {
+function getAuthenticationDetails(req) {
 
     try {
 
@@ -52,12 +53,7 @@ function getAuthenticationDetails(req, res) {
 
         return { token: token, header: JSON.parse(Buffer.from(token.split('.')[0], 'base64').toString('ascii')) }
 
-    } catch(e) {
-        
-        // no token or invalid token format = (400)
-        return aettbok.sendError(req, res, 400, 'tokenvalidator:invalidAuthenticationDetails')
-
-    }
+    } catch(e) { return null }
 
 }
 
@@ -115,6 +111,4 @@ function getApiKeysFromGoogle() {
 
 /* EXPORT MODULES */
 
-module.exports = {
-    validateToken,
-}
+module.exports = { validateToken }

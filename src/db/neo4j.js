@@ -117,7 +117,7 @@ function deleteNodeWithLabelAndId(label, id) {
 
 
 
-/* UPSERT AND DELETE REQUESTS */
+/* UPSERT REQUESTS */
 
 
 
@@ -249,8 +249,6 @@ function upsertNode(label, id, node, isUpdate) {
         return session
         .run(query, { id: id, attributes: { id: id, ...attributes }, ...addParams })
         .then(result => {
-
-            console.log(result)
 
             // id was not found = (404)
             if (!result.records.length) { return reject(404) }

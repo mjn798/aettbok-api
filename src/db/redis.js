@@ -12,15 +12,9 @@ const client = redis.createClient(process.env.REDIS_PORT)
     catch(e) { console.error('redisClient:connect:error', e) }
 })()
 
-
-
-/* NODE CACHING */
-
-
+// cache functions
 
 function deleteEntry(id) { return client.del(id) }
-
-function setEntry(id, value, expiration = process.env.REDIS_NODECACHE_SEC) { return client.setEx(id, expiration, JSON.stringify(value)) }
 
 function getEntry(id) {
     return new Promise((resolve, reject) => {
@@ -41,6 +35,8 @@ function getEntry(id) {
 
     })
 }
+
+function setEntry(id, value, expiration = process.env.REDIS_NODECACHE_SEC) { return client.setEx(id, expiration, JSON.stringify(value)) }
 
 
 
