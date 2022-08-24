@@ -23,7 +23,7 @@ app.use(cors())
 
 app.get('/ping', (_req, res) => res.status(204).send())
 
-app.delete('/:label/:id', tokens.validateToken, (req, res) => aettbok.deleteNodeWithLabelAndId(req, res))
+app.delete('/:label/:id', tokens.validateToken, (req, res) => aettbok.deleteNode(req, res))
 app.get('/:label/:id?',   tokens.validateToken, (req, res) => aettbok.getNodes(req, res))
 app.post('/:label',       tokens.validateToken, (req, res) => aettbok.postNodeInsert(req, res))
 app.post('/:label/:id',   tokens.validateToken, (req, res) => aettbok.postNodeUpdate(req, res))

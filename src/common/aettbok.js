@@ -35,7 +35,7 @@ function sendResult(req, res, status, payload, message) { return res.status(stat
     500 (Internal Server Error) = database or cache issues
 */
 
-async function getNodes(req, res) {
+function getNodes(req, res) {
 
     let { label, id } = req.params
 
@@ -80,23 +80,25 @@ async function getNodes(req, res) {
     500 (Internal Server Error) = database or cache issues
 */
 
-async function deleteNodeWithLabelAndId(req, res) {
+function deleteNode(req, res) {
 
     let { label, id } = req.params
 
     // unknown label or invalid id = (404)
-    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 404, `aettbok:deleteNodeWithLabelAndId:unknownLabelOrId ${label} ${id}`)}
+    if (!(isValidLabel(label) && isValidNodeId(id))) { return sendError(req, res, 404, `aettbok:deleteNode:unknownLabelOrId ${label} ${id}`)}
 
     return db.deleteNodeWithLabelAndId(label, id)
     .then(result => {
 
+        // if node is part of other nodes' relations, this will not be updated in the cache - yet
+
         redis.deleteEntry(`${label}`)
         redis.deleteEntry(`${label}:${id}`)
 
-        return sendResult(req, res, result, null, `aettbok:deleteNodeWithLabelAndId ${label}:${id}`)
+        return sendResult(req, res, result, null, `aettbok:deleteNode ${label}:${id}`)
 
     })
-    .catch(error => sendError(req, res, error, `aettbok:deleteNodeWithLabelAndId ${label}:${id}`))
+    .catch(error => sendError(req, res, error, `aettbok:deleteNode ${label}:${id}`))
 
 }
 
@@ -173,7 +175,7 @@ function postNodeUpdate(req, res, isUpdate = true) {
 /* EXPORT MODULES */
 
 module.exports = {
-    deleteNodeWithLabelAndId,
+    deleteNode,
     getNodes,
     postNodeInsert,
     postNodeUpdate,

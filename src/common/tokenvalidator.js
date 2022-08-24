@@ -19,7 +19,7 @@ const jwt     = require('jsonwebtoken')
     500 (Internal Server Error) = authentication provider or cache issues
 */
 
-async function validateToken(req, res, next) {
+function validateToken(req, res, next) {
 
     // authentication token and header
     let authenticationDetails = getAuthenticationDetails(req)
@@ -83,7 +83,7 @@ function getGoogleApiKey(apikey) {
             .catch(error => reject(error))
 
         })
-        .catch(error => reject(error))
+        .catch(() => reject(500))
 
     })
 }
