@@ -3,8 +3,10 @@ const fieldValidation = new Map()
 fieldValidation.set('Document', [
     /* fields */
     { name: 'content',      type: "string",  nullable: true  },
-    { name: 'date',         type: "string",  nullable: true  },
     { name: 'index',        type: "string",  nullable: true  },
+    { name: 'day',          type: "number",  nullable: true  },
+    { name: 'month',        type: "number",  nullable: true  },
+    { name: 'year',         type: "number",  nullable: true  },
     /* relations */
     { name: 'persons',      type: "object",  nullable: false }, // 1:n
     { name: 'sourcedby',    type: "string",  nullable: true  },
