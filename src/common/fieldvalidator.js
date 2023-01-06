@@ -8,6 +8,7 @@ fieldValidation.set('Document', [
     { name: 'month',        type: "number",  nullable: true  },
     { name: 'year',         type: "number",  nullable: true  },
     /* relations */
+    { name: 'events',       type: "object",  nullable: false }, // 1:n
     { name: 'persons',      type: "object",  nullable: false }, // 1:n
     { name: 'sourcedby',    type: "string",  nullable: true  },
     { name: 'tags',         type: "object",  nullable: false }, // 1:n
@@ -55,6 +56,7 @@ fieldValidation.set('Person', [
     { name: 'alive',        type: "boolean", nullable: false },
     /* relations */
     { name: 'documentedby', type: "object",  nullable: true  }, // 1:n
+    { name: 'haschildren',  type: "object",  nullable: true  }, // 1:n
     { name: 'hasparents',   type: "object",  nullable: true  }, // 1:n
     { name: 'tags',         type: "object",  nullable: false }, // 1:n
 ])

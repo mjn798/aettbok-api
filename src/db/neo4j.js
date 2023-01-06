@@ -5,7 +5,7 @@ const driver  = neo4j.driver(process.env.NEO4J_HOST, neo4j.auth.basic(process.en
 
 // configure relationships
 
-let relationshipFields = new Set(['attended', 'containedin', 'documentedby', 'hasparents', 'locationtype', 'partof', 'persons', 'sourcedby', 'storedin', 'tags', 'wasin'])
+let relationshipFields = new Set(['attended', 'containedin', 'documentedby', 'events', 'haschildren', 'hasparents', 'locationtype', 'partof', 'persons', 'sourcedby', 'storedin', 'tags', 'wasin'])
 
 
 
@@ -152,14 +152,17 @@ function upsertNode(label, id, node, isUpdate) {
 
             case 'Document':
 
+                addParams.events = relations.events
                 addParams.persons = relations.persons
                 addParams.sourcedby = relations.sourcedby || 's'
                 addParams.tags = relations.tags
 
-                query += ` WITH n1 OPTIONAL MATCH (n1)<-[r:DOCUMENTEDBY]-(p:Person) WHERE NOT p.id IN $persons DELETE p`
+                query += ` WITH n1 OPTIONAL MATCH (n1)<-[r:DOCUMENTEDBY]-(e:Event) WHERE NOT e.id IN $events DELETE r`
+                query += ` WITH n1 OPTIONAL MATCH (n1)<-[r:DOCUMENTEDBY]-(p:Person) WHERE NOT p.id IN $persons DELETE r`
                 query += ` WITH n1 OPTIONAL MATCH (n1)-[r:SOURCEDBY]->(s:Source) WHERE NOT s.id = $sourcedby DELETE r`
                 query += ` WITH n1 OPTIONAL MATCH (n1)-[r:TAGGED]->(t:Tag) WHERE NOT t.id IN $tags DELETE r`
 
+                if (addParams.events.length) { query += ` WITH n1 MATCH (e:Event) WHERE e.id IN $events MERGE (n1)<-[r:DOCUMENTEDBY]-(e)` }
                 if (addParams.persons.length) { query += ` WITH n1 MATCH (p:Person) WHERE p.id IN $persons MERGE (n1)<-[r:DOCUMENTEDBY]-(p)` }
                 if (addParams.sourcedby !== 's') { query += ` WITH n1 MATCH (s:Source { id: $sourcedby }) MERGE (n1)-[r:SOURCEDBY]->(s)` }
                 if (addParams.tags.length) { query += ` WITH n1 MATCH (t:Tag) WHERE t.id IN $tags MERGE (n1)-[r:TAGGED]->(t)` }
@@ -207,14 +210,17 @@ function upsertNode(label, id, node, isUpdate) {
             case 'Person':
 
                 addParams.documentedby = relations.documentedby
+                addParams.haschildren = relations.haschildren
                 addParams.hasparents = relations.hasparents
                 addParams.tags = relations.tags
 
                 query += ` WITH n1 OPTIONAL MATCH (n1)-[r:DOCUMENTEDBY]->(d:Document) WHERE NOT d.id IN $documentedby DELETE r`
+                query += ` WITH n1 OPTIONAL MATCH (n1)<-[r:HASPARENT]-(p:Person) WHERE NOT p.id IN $haschildren DELETE r`
                 query += ` WITH n1 OPTIONAL MATCH (n1)-[r:HASPARENT]->(p:Person) WHERE NOT p.id IN $hasparents DELETE r`
                 query += ` WITH n1 OPTIONAL MATCH (n1)-[r:TAGGED]->(t:Tag) WHERE NOT t.id IN $tags DELETE r`
 
                 if (addParams.documentedby.length) { query += ` WITH n1 MATCH (d:Document) WHERE d.id IN $documentedby MERGE (n1)-[r:DOCUMENTEDBY]->(d)` }
+                if (addParams.haschildren.length) { query += ` WITH n1 MATCH (p:Person) WHERE p.id IN $haschildren MERGE (n1)<-[r:HASPARENT]-(p)` }
                 if (addParams.hasparents.length) { query += ` WITH n1 MATCH (p:Person) WHERE p.id IN $hasparents MERGE (n1)-[r:HASPARENT]->(p)` }
                 if (addParams.tags.length) { query += ` WITH n1 MATCH (t:Tag) WHERE t.id IN $tags MERGE (n1)-[r:TAGGED]->(t)` }
 
