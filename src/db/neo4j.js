@@ -18,7 +18,7 @@ let relationshipFields = new Set(['attended', 'containedin', 'documentedby', 'ev
 function getNodes(label, id = null) {
     return new Promise((resolve, reject) => {
 
-        let query = `MATCH (n1:${label}${ id === null ? '' : ' { id : $id}' }) OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, n2`
+        let query = `MATCH (n1:${label}${ id === null ? '' : ' { id : $id}' }) OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, { label: head(labels(n2)), id: head(collect(n2.id)) } as n2`
         let param = { id: id }
 
         let session = driver.session()
@@ -81,7 +81,7 @@ function extractRelationship(record) {
 
     if (!((i >= 0) && n && r)) { return null }
 
-    return { label: n.labels[0], id: n.properties.id, direction: r.start.low === i ? 'to' : 'from' }
+    return { label: n.label, id: n.id, direction: r.start.low === i ? 'to' : 'from' }
 
 }
 
@@ -248,7 +248,7 @@ function upsertNode(label, id, node, isUpdate) {
 
         // continue with query and get default results
 
-        query += ' WITH n1 OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, n2'
+        query += ' WITH n1 OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, { label: head(labels(n2)), id: head(collect(n2.id)) } as n2'
 
         let session = driver.session()
 
