@@ -18,7 +18,7 @@ let relationshipFields = new Set(['attended', 'containedin', 'documentedby', 'ev
 function getNodes(label, id = null) {
     return new Promise((resolve, reject) => {
 
-        let query = `MATCH (n1:${label}${ id === null ? '' : ' { id : $id}' }) OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, { label: head(labels(n2)), id: head(collect(n2.id)) } as n2`
+        let query = `MATCH (n1:${label}${ id === null ? '' : ' { id : $id}' }) OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, head(labels(n2)) as n2label, head(collect(n2.id)) as n2id`
         let param = { id: id }
 
         let session = driver.session()
@@ -39,7 +39,10 @@ function getNodes(label, id = null) {
             return resolve(nodes[0])
 
         })
-        .catch(() => reject(500))
+        .catch((error) => {
+            console.error(error)
+            return reject(500)
+        })
         .finally(() => session.close())
 
     })
@@ -75,13 +78,14 @@ function extractNodes(records) {
 
 function extractRelationship(record) {
 
-    let i = record.get('n1').identity.low
-    let n = record.get('n2')
-    let r = record.get('r')
+    let i  = record.get('n1').identity.low
+    let nl = record.get('n2label')
+    let ni = record.get('n2id')
+    let r  = record.get('r')
 
-    if (!((i >= 0) && n && r)) { return null }
+    if (!((i >= 0) && nl && ni && r)) { return null }
 
-    return { label: n.label, id: n.id, direction: r.start.low === i ? 'to' : 'from' }
+    return { label: nl, id: ni, direction: r.start.low === i ? 'to' : 'from' }
 
 }
 
@@ -248,7 +252,7 @@ function upsertNode(label, id, node, isUpdate) {
 
         // continue with query and get default results
 
-        query += ' WITH n1 OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, { label: head(labels(n2)), id: head(collect(n2.id)) } as n2'
+        query += ' WITH n1 OPTIONAL MATCH (n1)-[r]-(n2) RETURN n1, r, head(labels(n2)) as n2label, head(collect(n2.id)) as n2id'
 
         let session = driver.session()
 
